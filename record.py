@@ -1,13 +1,17 @@
 import streamlit as st
+import os
+
+# --- REQUIRED FIXES ---
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"   # Fix for Streamlit / Whisper crash
+os.environ["PATH"] += os.pathsep + r"C:\ffmpeg\ffmpeg-7.1.1-full_build\bin"  # ffmpeg path
+# --------------------------------
+
 import whisper
 import sounddevice as sd
 from scipy.io.wavfile import write
 import numpy as np
 import tempfile
-import os
 
-# Ensure ffmpeg path is included (update if needed)
-os.environ["PATH"] += os.pathsep + r"C:\ffmpeg\ffmpeg-7.1.1-full_build\bin"
 
 # Page config
 st.set_page_config(page_title="🎤 Record or Upload & Transcribe", layout="centered")
