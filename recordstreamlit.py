@@ -9,7 +9,7 @@ import numpy as np
 import soundfile as sf
 
 # Ensure ffmpeg path is included if needed (mostly for local)
-os.environ["PATH"] += os.pathsep + r"C:\ffmpeg\ffmpeg-7.1.1-full_build\bin"
+#os.environ["PATH"] += os.pathsep + r"C:\ffmpeg\ffmpeg-7.1.1-full_build\bin"
 
 # ------------------- FFmpeg Check -------------------
 def check_ffmpeg():
