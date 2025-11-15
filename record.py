@@ -20,10 +20,36 @@ check_ffmpeg()
 
 # ------------------- Extract Audio Function (Missing in your code) -------------------
 def extract_audio_from_video(video_path):
-    audio_path = video_path + "_audio.wav"
-    command = f'ffmpeg -i "{video_path}" -vn -acodec pcm_s16le -ar 16000 -ac 1 "{audio_path}" -y'
-    subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    """
+    Extract audio from a video file into a WAV (16kHz mono) and return the path.
+    """
+    import tempfile
+    import subprocess
+    import os
+
+    # Create a proper temporary WAV file
+    tmp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+    audio_path = tmp_audio.name
+    tmp_audio.close()  # Close it so FFmpeg can write
+
+    # FFmpeg command
+    command = [
+        "ffmpeg",
+        "-i", video_path,
+        "-vn",               # no video
+        "-acodec", "pcm_s16le",
+        "-ar", "16000",      # 16 kHz
+        "-ac", "1",          # mono
+        "-y",                # overwrite
+        audio_path
+    ]
+
+    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode != 0:
+        raise RuntimeError(f"FFmpeg failed:\n{result.stderr.decode()}")
+
     return audio_path
+
 
 # Page config
 st.set_page_config(page_title="🎤 Record or Upload & Transcribe", layout="centered")
@@ -110,59 +136,73 @@ with tab2:
             finally:
                 os.remove(tmpfile_path)
 
-# ------------------- Video Transcription UI -------------------
+# ------------------- Video / YouTube Transcription UI -------------------
 with tab3:
-    st.subheader("🎬 Upload Video or Paste Link")
+    st.subheader("🎬 Upload Video or Paste YouTube Link")
 
     video_file = st.file_uploader("Upload Video (MP4 / MKV / MOV)", type=["mp4", "mkv", "mov"])
     video_url = st.text_input("Or Paste Video URL (YouTube)")
 
+    # ------------------- Uploaded Video -------------------
     if video_file:
         st.video(video_file)
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
-            tmp.write(video_file.read())
-            video_path = tmp.name
 
-        with st.spinner("🎧 Extracting audio..."):
-            audio_path = extract_audio_from_video(video_path)
+        # Save uploaded video safely on Windows
+        video_path = tempfile.mktemp(suffix=".mp4")
+        with open(video_path, "wb") as f:
+            f.write(video_file.read())
 
-        with st.spinner("🔍 Transcribing..."):
-            try:
-                result = transcribe_audio(audio_path, language)
-                st.success("✅ Video Transcription Complete!")
-                st.text_area("📄 Transcribed Text", result["text"], height=250)
-            except Exception as e:
-                st.error(f"❌ Error: {e}")
-            finally:
-                if os.path.exists(video_path):
-                    os.remove(video_path)
-                if os.path.exists(audio_path):
-                    os.remove(audio_path)
-
-    if video_url:
-        st.video(video_url)
-        st.warning("📥 Downloading from YouTube requires 'yt-dlp' installed")
-
-        if st.button("⬇️ Download & Transcribe YouTube Video"):
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
-                video_path = tmp.name
-
-            st.info("📥 Downloading...")
-            cmd = f'yt-dlp -o "{video_path}" "{video_url}"'
-            subprocess.run(cmd, shell=True)
-
+        try:
             with st.spinner("🎧 Extracting audio..."):
                 audio_path = extract_audio_from_video(video_path)
 
             with st.spinner("🔍 Transcribing..."):
-                try:
-                    result = transcribe_audio(audio_path, language)
+                result = transcribe_audio(audio_path, language)
+                if result["text"].strip():
                     st.success("✅ Video Transcription Complete!")
                     st.text_area("📄 Transcribed Text", result["text"], height=250)
-                except Exception as e:
-                    st.error(f"❌ Error: {e}")
-                finally:
-                    if os.path.exists(video_path):
-                        os.remove(video_path)
-                    if os.path.exists(audio_path):
-                        os.remove(audio_path)
+                else:
+                    st.warning("⚠️ No speech detected.")
+        except Exception as e:
+            st.error(f"❌ Error: {e}")
+        finally:
+            # Cleanup temporary files
+            if os.path.exists(video_path):
+                os.remove(video_path)
+            if 'audio_path' in locals() and os.path.exists(audio_path):
+                os.remove(audio_path)
+
+    # ------------------- YouTube Video -------------------
+    if video_url:
+        st.warning("📥 Downloading from YouTube requires 'yt-dlp' installed.")
+
+        if st.button("⬇️ Download & Transcribe YouTube Video"):
+            video_path = tempfile.mktemp(suffix=".mp4")  # safer on Windows
+
+            # Download YouTube video
+            st.info("📥 Downloading video...")
+            try:
+                subprocess.run(f'yt-dlp -f best -o "{video_path}" "{video_url}"', 
+                               shell=True, check=True)
+                st.success("✅ Download complete.")
+
+                with st.spinner("🎧 Extracting audio..."):
+                    audio_path = extract_audio_from_video(video_path)
+
+                with st.spinner("🔍 Transcribing..."):
+                    result = transcribe_audio(audio_path, language)
+                    if result["text"].strip():
+                        st.success("✅ Video Transcription Complete!")
+                        st.text_area("📄 Transcribed Text", result["text"], height=250)
+                    else:
+                        st.warning("⚠️ No speech detected.")
+            except subprocess.CalledProcessError as e:
+                st.error(f"❌ YouTube download failed:\n{e}")
+            except Exception as e:
+                st.error(f"❌ Error: {e}")
+            finally:
+                # Cleanup temporary files
+                if os.path.exists(video_path):
+                    os.remove(video_path)
+                if 'audio_path' in locals() and os.path.exists(audio_path):
+                    os.remove(audio_path)
