@@ -1,0 +1,7 @@
+streamlit
+openai-whisper
+torch
+numpy==1.26.4
+scipy
+sounddevice
+ffmpeg-python
