@@ -49,8 +49,9 @@ def download_youtube_video(url):
     # Ensure yt-dlp is available as a CLI
     if not shutil.which("yt-dlp"):
         raise RuntimeError("❌ 'yt-dlp' not found. Install yt-dlp and make sure it's in PATH.")
+    
+    cmd = ["yt-dlp", "-o", video_path, url]
 
-    cmd = ["yt-dlp", "-f", "best", "-o", video_path, url]
 
     try:
         subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
