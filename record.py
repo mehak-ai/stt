@@ -225,32 +225,32 @@ with tab3:
                 os.remove(audio_path)
 
     # ---------- YouTube ----------
-    if video_url:
-        if not cookie_path:
-            st.error("❌ You must upload cookies.txt to download YouTube videos.")
-        else:
-            if st.button("⬇️ Download & Transcribe YouTube Video"):
-                video_path = None
-                audio_path = None
-
-                try:
-                    with st.spinner("📥 Downloading video..."):
-                        video_path = download_youtube_video(video_url, cookie_path)
-
-                    with st.spinner("🎧 Extracting audio..."):
-                        audio_path = extract_audio_from_video(video_path)
-
-                    with st.spinner("🔍 Transcribing..."):
-                        result = transcribe_audio(audio_path, language, model_size)
-
-                    st.success("✅ Video Transcription Complete!")
-                    st.text_area("📄 Transcribed Text", result.get("text", ""), height=250)
-
-                except Exception as e:
-                    st.error(f"❌ Error: {e}")
-
-                finally:
-                    if video_path and os.path.exists(video_path):
-                        os.remove(video_path)
-                    if audio_path and os.path.exists(audio_path):
-                        os.remove(audio_path)
+    # if video_url:
+    #     if not cookie_path:
+    #         st.error("❌ You must upload cookies.txt to download YouTube videos.")
+    #     else:
+    #         if st.button("⬇️ Download & Transcribe YouTube Video"):
+    #             video_path = None
+    #             audio_path = None
+    #
+    #             try:
+    #                 with st.spinner("📥 Downloading video..."):
+    #                     video_path = download_youtube_video(video_url, cookie_path)
+    #
+    #                 with st.spinner("🎧 Extracting audio..."):
+    #                     audio_path = extract_audio_from_video(video_path)
+    #
+    #                 with st.spinner("🔍 Transcribing..."):
+    #                     result = transcribe_audio(audio_path, language, model_size)
+    #
+    #                 st.success("✅ Video Transcription Complete!")
+    #                 st.text_area("📄 Transcribed Text", result.get("text", ""), height=250)
+    #
+    #             except Exception as e:
+    #                 st.error(f"❌ Error: {e}")
+    #
+    #             finally:
+    #                 if video_path and os.path.exists(video_path):
+    #                     os.remove(video_path)
+    #                 if audio_path and os.path.exists(audio_path):
+    #                     os.remove(audio_path)
