@@ -2,7 +2,6 @@
 
 # 🎙️ Whisper Speech-to-Text App
 
-[Live Demo](https://speechtotext123.streamlit.app/)
 
 A web application built with **Streamlit** and **OpenAI Whisper** for transcribing speech from audio, video, and YouTube videos. It supports multiple languages and provides easy downloading of transcriptions and recorded audio.
 
@@ -14,17 +13,9 @@ A web application built with **Streamlit** and **OpenAI Whisper** for transcribi
 * **Record from Browser Microphone** (local only): Uses WebRTC to record audio directly in your browser.
 * **Upload Video Files**: Supports MP4, MKV, MOV formats and extracts audio for transcription.
 * **YouTube Video Transcription**: Paste a YouTube link and the app will download and transcribe it.
-* **Multi-language Support**: Transcribe audio in multiple languages including English, Hindi, Spanish, French, German, Japanese, and Chinese.
 * **Downloadable Files**: Download your recorded audio or extracted audio from videos.
 * **Real-time Feedback**: Shows transcription progress using spinners and success messages.
 
-
-
-## Demo
-
-![App Screenshot](https://user-images.githubusercontent.com/placeholder/demo-screenshot.png)
-
-> **Try it live:** [https://speechtotext123.streamlit.app/](https://speechtotext123.streamlit.app/)
 
 
 
@@ -76,17 +67,8 @@ streamlit run recordstreamlit.py
 
 
 
-## Deployment
-
-The app is deployed on **Streamlit Cloud**:
-[https://speechtotext123.streamlit.app/](https://speechtotext123.streamlit.app/)
-
-
-
 ## License
 
 This project is **open source** and free to use for personal and educational purposes.
 
 
-
-Do you want me to make that too?
