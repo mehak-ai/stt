@@ -3,6 +3,7 @@ import whisper
 import tempfile
 import os
 import subprocess
+import shutil
 from streamlit_webrtc import webrtc_streamer, WebRtcMode
 import av
 import numpy as np
@@ -38,6 +39,25 @@ def extract_audio_from_video(video_path):
         raise RuntimeError(f"FFmpeg failed:\n{result.stderr.decode()}")
 
     return audio_path
+
+# ------------------- YouTube download (uses yt-dlp CLI) -------------------
+def download_youtube_video(url):
+    tmp_video = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+    video_path = tmp_video.name
+    tmp_video.close()
+
+    # Ensure yt-dlp is available as a CLI
+    if not shutil.which("yt-dlp"):
+        raise RuntimeError("❌ 'yt-dlp' not found. Install yt-dlp and make sure it's in PATH.")
+
+    cmd = ["yt-dlp", "-f", "best", "-o", video_path, url]
+
+    try:
+        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        return video_path
+    except subprocess.CalledProcessError as e:
+        stderr = e.stderr.decode() if e.stderr else str(e)
+        raise RuntimeError(f"❌ YouTube download failed: {stderr}")
 
 # ------------------- Whisper Loader -------------------
 @st.cache_resource(show_spinner=False)
@@ -82,7 +102,7 @@ with tab1:
         with st.spinner("🔍 Transcribing..."):
             try:
                 result = transcribe_audio(tmp_path, language)
-                if result["text"].strip():
+                if result.get("text", "").strip():
                     st.success("✅ Transcription complete!")
                     st.text_area("📄 Transcribed Text", result["text"], height=200)
                 else:
@@ -90,13 +110,13 @@ with tab1:
             except Exception as e:
                 st.error(f"❌ Transcription failed: {e}")
             finally:
-                os.remove(tmp_path)
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
 
 # ===================== TAB 2: BROWSER MICROPHONE RECORDING =====================
 with tab2:
     st.subheader("🎤 Record from Microphone (Browser)")
 
-    # WebRTC audio receiver
     webrtc_ctx = webrtc_streamer(
         key="mic-recorder",
         mode=WebRtcMode.RECVONLY,
@@ -107,39 +127,43 @@ with tab2:
 
     if webrtc_ctx.state.playing:
         if st.button("⏺️ Stop & Transcribe"):
+            # Try to get frames for up to `duration` seconds
             audio_frames = webrtc_ctx.audio_receiver.get_frames(timeout=duration)
 
             if audio_frames:
-                # Convert all frames to mono arrays
-                combined_audio = np.concatenate([
-                    f.to_ndarray().mean(axis=0) if f.to_ndarray().ndim > 1 else f.to_ndarray()
-                    for f in audio_frames
-                ])
+                try:
+                    # Convert frames to mono numpy arrays and concatenate
+                    arrays = []
+                    for f in audio_frames:
+                        arr = f.to_ndarray()
+                        if arr.ndim > 1:
+                            arr = arr.mean(axis=0)
+                        arrays.append(arr)
+                    combined_audio = np.concatenate(arrays)
 
-                # Save temporary WAV file
-                tmp_wav = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-                sf.write(tmp_wav.name, combined_audio, 16000)
-                wav_path = tmp_wav.name
-                tmp_wav.close()
+                    # Save temporary WAV file at 16kHz
+                    tmp_wav = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+                    wav_path = tmp_wav.name
+                    tmp_wav.close()
+                    sf.write(wav_path, combined_audio, 16000)
 
-                st.audio(wav_path)
+                    st.audio(wav_path)
 
-                with open(wav_path, "rb") as f:
-                    st.download_button("⬇️ Download Audio", data=f.read(), file_name="recorded_audio.wav")
+                    with open(wav_path, "rb") as f:
+                        st.download_button("⬇️ Download Audio", data=f.read(), file_name="recorded_audio.wav")
 
-                with st.spinner("🔍 Transcribing..."):
-                    try:
+                    with st.spinner("🔍 Transcribing..."):
                         result = transcribe_audio(wav_path, language)
-                        if result["text"].strip():
+                        if result.get("text", "").strip():
                             st.success("✅ Transcription complete!")
                             st.text_area("📄 Transcribed Text", result["text"], height=200)
                         else:
                             st.warning("⚠️ No speech detected.")
-                    except Exception as e:
-                        st.error(f"❌ Transcription failed: {e}")
-                    finally:
+                except Exception as e:
+                    st.error(f"❌ Transcription failed: {e}")
+                finally:
+                    if 'wav_path' in locals() and os.path.exists(wav_path):
                         os.remove(wav_path)
-
             else:
                 st.warning("⚠️ No audio frames captured.")
 
@@ -158,6 +182,7 @@ with tab3:
         with open(video_path, "wb") as f:
             f.write(video_file.read())
 
+        audio_path = None
         try:
             with st.spinner("🎧 Extracting audio..."):
                 audio_path = extract_audio_from_video(video_path)
@@ -165,31 +190,29 @@ with tab3:
             with st.spinner("🔍 Transcribing..."):
                 result = transcribe_audio(audio_path, language)
 
-                if result["text"].strip():
-                    st.success("✅ Video Transcription Complete!")
-                    st.text_area("📄 Transcribed Text", result["text"], height=250)
-                else:
-                    st.warning("⚠️ No speech detected.")
+            if result.get("text", "").strip():
+                st.success("✅ Video Transcription Complete!")
+                st.text_area("📄 Transcribed Text", result["text"], height=250)
+            else:
+                st.warning("⚠️ No speech detected.")
 
         except Exception as e:
             st.error(f"❌ Error: {e}")
+
         finally:
-            if os.path.exists(video_path): os.remove(video_path)
-            if os.path.exists(audio_path): os.remove(audio_path)
+            if os.path.exists(video_path):
+                os.remove(video_path)
+            if audio_path and os.path.exists(audio_path):
+                os.remove(audio_path)
 
-    # ---------- YouTube Download (yt-dlp required) ----------
+    # ---------- YouTube Download (yt-dlp CLI required) ----------
     if video_url:
-        st.warning("📥 This requires 'yt-dlp' installed.")
-
         if st.button("⬇️ Download & Transcribe YouTube Video"):
-            video_path = tempfile.mktemp(suffix=".mp4")
-
+            video_path = None
+            audio_path = None
             try:
-                st.info("📥 Downloading...")
-                subprocess.run(
-                    f'yt-dlp -f best -o "{video_path}" "{video_url}"',
-                    shell=True, check=True
-                )
+                with st.spinner("📥 Downloading video..."):
+                    video_path = download_youtube_video(video_url)
 
                 with st.spinner("🎧 Extracting audio..."):
                     audio_path = extract_audio_from_video(video_path)
@@ -197,12 +220,17 @@ with tab3:
                 with st.spinner("🔍 Transcribing..."):
                     result = transcribe_audio(audio_path, language)
 
-                st.success("✅ Done!")
-                st.text_area("📄 Transcribed Text", result["text"], height=250)
+                if result.get("text", "").strip():
+                    st.success("✅ Video Transcription Complete!")
+                    st.text_area("📄 Transcribed Text", result["text"], height=250)
+                else:
+                    st.warning("⚠️ No speech detected.")
 
             except Exception as e:
                 st.error(f"❌ Error: {e}")
 
             finally:
-                if os.path.exists(video_path): os.remove(video_path)
-                if os.path.exists(audio_path): os.remove(audio_path)
+                if video_path and os.path.exists(video_path):
+                    os.remove(video_path)
+                if audio_path and os.path.exists(audio_path):
+                    os.remove(audio_path)
