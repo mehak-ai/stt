@@ -50,7 +50,8 @@ def download_youtube_video(url):
     if not shutil.which("yt-dlp"):
         raise RuntimeError("❌ 'yt-dlp' not found. Install yt-dlp and make sure it's in PATH.")
     
-    cmd = ["yt-dlp", "-o", video_path, url]
+    cmd = ["yt-dlp", "--cookies", "cookies.txt", "-o", video_path, url]
+
 
 
     try:
