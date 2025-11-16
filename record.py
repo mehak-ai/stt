@@ -46,20 +46,46 @@ def download_youtube_video(url):
     video_path = tmp_video.name
     tmp_video.close()
 
-    # Ensure yt-dlp is available as a CLI
+    # Check yt-dlp availability
     if not shutil.which("yt-dlp"):
         raise RuntimeError("❌ 'yt-dlp' not found. Install yt-dlp and make sure it's in PATH.")
-    
-    cmd = ["yt-dlp", "--cookies", "cookies.txt", "-o", video_path, url]
 
-
+    # Command with all required flags
+    cmd = [
+        "yt-dlp",
+        "--cookies", "cookies.txt",                           # Bypass login + 429
+        "--extractor-args", "youtube:player_client=default",  # Bypass JS runtime issue
+        "--geo-bypass",                                       # Avoid region restrictions
+        "-f", "bestaudio/best",                               # Audio-first always works
+        "-o", video_path,
+        url
+    ]
 
     try:
-        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False
+        )
+
+        # Check if yt-dlp succeeded
+        if result.returncode != 0:
+            raise RuntimeError(f"yt-dlp error:\n{result.stderr}")
+
+        # Validate file size (must be >50 KB)
+        if not os.path.exists(video_path) or os.path.getsize(video_path) < 50000:
+            raise RuntimeError(
+                "❌ YouTube download failed. Received invalid/empty file.\n"
+                "Most likely caused by expired cookies or YouTube blocking Streamlit."
+            )
+
         return video_path
-    except subprocess.CalledProcessError as e:
-        stderr = e.stderr.decode() if e.stderr else str(e)
-        raise RuntimeError(f"❌ YouTube download failed: {stderr}")
+
+    except Exception as e:
+        raise RuntimeError(f"❌ YouTube download failed: {e}")
+
 
 # ------------------- Whisper Loader -------------------
 @st.cache_resource(show_spinner=False)
