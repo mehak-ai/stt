@@ -6,3 +6,4 @@ scipy
 ffmpeg-python
 streamlit-webrtc
 soundfile
+yt-dlp
