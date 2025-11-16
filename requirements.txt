@@ -7,6 +7,3 @@ ffmpeg-python
 streamlit-webrtc
 soundfile
 yt-dlp
-shutil
-subprocess
-sounddevice
