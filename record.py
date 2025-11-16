@@ -119,90 +119,55 @@ with tab1:
 with tab2:
     st.subheader("🎤 Record from Microphone (Browser)")
 
-    # Session states
-    if "recording" not in st.session_state:
-        st.session_state.recording = False
-    if "audio_frames" not in st.session_state:
-        st.session_state.audio_frames = []
-
-    # WebRTC streamer
     webrtc_ctx = webrtc_streamer(
-        key="voice-recorder",
-        mode=WebRtcMode.SENDRECV,
+        key="mic-recorder",
+        mode=WebRtcMode.RECVONLY,
         media_stream_constraints={"audio": True, "video": False},
-        rtc_configuration={
-            "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
-        },
-        async_processing=True,
+        audio_receiver_size=1024,
+        rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
     )
 
-    # START RECORDING
-    if not st.session_state.recording:
-        if st.button("🎙️ START Recording"):
-            st.session_state.recording = True
-            st.session_state.audio_frames = []
-            st.toast("🎙️ Recording started...")
+    if webrtc_ctx.state.playing:
+        if st.button("⏺️ Stop & Transcribe"):
+            # Try to get frames for up to `duration` seconds
+            audio_frames = webrtc_ctx.audio_receiver.get_frames(timeout=duration)
 
-    # STOP RECORDING
-    if st.session_state.recording:
-        if st.button("⏹️ STOP Recording"):
-            st.session_state.recording = False
-            st.toast("⏹️ Recording stopped.")
+            if audio_frames:
+                try:
+                    # Convert frames to mono numpy arrays and concatenate
+                    arrays = []
+                    for f in audio_frames:
+                        arr = f.to_ndarray()
+                        if arr.ndim > 1:
+                            arr = arr.mean(axis=0)
+                        arrays.append(arr)
+                    combined_audio = np.concatenate(arrays)
 
-    # Collect audio frames continuously
-    if webrtc_ctx and webrtc_ctx.state.playing and st.session_state.recording:
-        try:
-            frame = webrtc_ctx.audio_receiver.get_frame(timeout=1)
-            if frame:
-                st.session_state.audio_frames.append(frame)
-        except:
-            pass  # avoid connection noise
+                    # Save temporary WAV file at 16kHz
+                    tmp_wav = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+                    wav_path = tmp_wav.name
+                    tmp_wav.close()
+                    sf.write(wav_path, combined_audio, 16000)
 
-    # SHOW "Transcribe" only after stopping
-    if not st.session_state.recording and len(st.session_state.audio_frames) > 0:
+                    st.audio(wav_path)
 
-        if st.button("📝 Transcribe Recording"):
-            try:
-                arrays = []
+                    with open(wav_path, "rb") as f:
+                        st.download_button("⬇️ Download Audio", data=f.read(), file_name="recorded_audio.wav")
 
-                # Convert frames to mono numpy arrays
-                for f in st.session_state.audio_frames:
-                    arr = f.to_ndarray()
-                    if arr.ndim > 1:
-                        arr = arr.mean(axis=0)
-                    arrays.append(arr)
-
-                combined_audio = np.concatenate(arrays)
-
-                # Save WAV
-                tmp_wav = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-                wav_path = tmp_wav.name
-                tmp_wav.close()
-                sf.write(wav_path, combined_audio, 16000)
-
-                st.audio(wav_path)
-
-                with open(wav_path, "rb") as f:
-                    st.download_button("⬇️ Download Recorded Audio", f, file_name="recorded_audio.wav")
-
-                with st.spinner("🔍 Transcribing..."):
-                    result = transcribe_audio(wav_path, language, model_size)
-
-                text = result.get("text", "").strip()
-                if text:
-                    st.success("✅ Transcription complete!")
-                    st.text_area("📄 Transcribed Text", text, height=200)
-                else:
-                    st.warning("⚠️ No speech detected.")
-
-            except Exception as e:
-                st.error(f"❌ Transcription error: {e}")
-
-            finally:
-                if os.path.exists(wav_path):
-                    os.remove(wav_path)
-                st.session_state.audio_frames = []   # reset
-
+                    with st.spinner("🔍 Transcribing..."):
+                        result = transcribe_audio(wav_path, language)
+                        if result.get("text", "").strip():
+                            st.success("✅ Transcription complete!")
+                            st.text_area("📄 Transcribed Text", result["text"], height=200)
+                        else:
+                            st.warning("⚠️ No speech detected.")
+                except Exception as e:
+                    st.error(f"❌ Transcription failed: {e}")
+                finally:
+                    if 'wav_path' in locals() and os.path.exists(wav_path):
+                        os.remove(wav_path)
+            else:
+                st.warning("⚠️ No audio frames captured.")
 
 # ===================== TAB 3: VIDEO + YOUTUBE =====================
 with tab3:
