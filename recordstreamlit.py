@@ -175,23 +175,52 @@ with tab3:
 
     if video_url:
         st.warning("📥 Downloading from YouTube requires 'yt-dlp' installed.")
+        # Optional cookie upload (recommended for restricted videos)
+        cookies_file = st.file_uploader("Upload cookies.txt (optional)", type=["txt"])
+
         if st.button("⬇️ Download & Transcribe YouTube Video"):
             video_path = tempfile.mktemp(suffix=".mp4")
+
             try:
-                subprocess.run(f'yt-dlp -f best -o "{video_path}" "{video_url}"', shell=True, check=True)
+                # Base command
+                cmd = ["yt-dlp", "-f", "best"]
+
+                # If cookies are provided
+                if cookies_file:
+                    temp_cookie = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
+                    temp_cookie.write(cookies_file.read())
+                    temp_cookie.close()
+                    cmd += ["--cookies", temp_cookie.name]
+
+                cmd += ["-o", video_path, video_url]
+
+                # Run yt-dlp & capture actual errors
+                result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+                if result.returncode != 0:
+                    raise RuntimeError(f"yt-dlp error:\n{result.stderr}")
+
+                # Extract audio
                 audio_path = extract_audio_from_video(video_path)
-                result = transcribe_audio(audio_path, language)
-                if result["text"].strip():
+
+                # Transcribe
+                result_text = transcribe_audio(audio_path, language)
+
+                if result_text["text"].strip():
                     st.success("✅ Video Transcription Complete!")
-                    st.text_area("📄 Transcribed Text", result["text"], height=250)
+                    st.text_area("📄 Transcribed Text", result_text["text"], height=250)
                 else:
                     st.warning("⚠️ No speech detected.")
-            except subprocess.CalledProcessError as e:
-                st.error(f"❌ YouTube download failed:\n{e}")
+
             except Exception as e:
-                st.error(f"❌ Error: {e}")
+                st.error(f"❌ YouTube download failed:\n{e}")
+
             finally:
                 if os.path.exists(video_path):
                     os.remove(video_path)
+
+                if 'temp_cookie' in locals() and os.path.exists(temp_cookie.name):
+                    os.remove(temp_cookie.name)
+
                 if 'audio_path' in locals() and os.path.exists(audio_path):
                     os.remove(audio_path)
