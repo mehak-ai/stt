@@ -6,6 +6,13 @@ import numpy as np
 import tempfile
 import os
 import subprocess
+import time
+
+# ----------------------------------
+# Session state initialization
+# ----------------------------------
+if "record_run" not in st.session_state:
+    st.session_state.record_run = 0
 
 # Ensure ffmpeg path is included (update if needed)
 os.environ["PATH"] += os.pathsep + r"C:\ffmpeg\ffmpeg-7.1.1-full_build\bin"
@@ -107,34 +114,75 @@ with tab1:
 
 # ------------------- Recorder UI -------------------
 with tab2:
+    # Increment run counter on button click (forces reset)
     if st.button("⏺️ Start Recording"):
-        st.info("🎙️ Recording...")
-        audio = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype='int16')
-        sd.wait()
-        st.success("✅ Recording complete!")
+        st.session_state.record_run += 1
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav", mode="wb") as tmpfile:
-            write(tmpfile.name, sample_rate, audio)
-            tmpfile.flush()
-            os.fsync(tmpfile.fileno())
-            tmpfile_path = tmpfile.name
+    # Placeholders (everything goes inside these)
+    status_placeholder = st.empty()
+    output_placeholder = st.container()
 
-        st.audio(tmpfile_path, format="audio/wav")
-        with open(tmpfile_path, "rb") as f:
-            st.download_button("⬇️ Download Audio", data=f.read(), file_name="recorded_audio.wav")
+    # Only run recording after button click
+    if st.session_state.record_run > 0:
+        with output_placeholder:
+            # Show recording status
+            status_placeholder.info("🎙️ Recording...")
 
-        with st.spinner("🔍 Transcribing..."):
-            try:
-                result = transcribe_audio(tmpfile_path, language)
-                if result["text"].strip():
-                    st.success("✅ Transcription complete!")
-                    st.text_area("📄 Transcribed Text", result["text"], height=200)
-                else:
-                    st.warning("⚠️ No speech detected.")
-            except Exception as e:
-                st.error(f"❌ Transcription failed: {e}")
-            finally:
-                os.remove(tmpfile_path)
+            # Start recording
+            audio = sd.rec(
+                int(duration * sample_rate),
+                samplerate=sample_rate,
+                channels=1,
+                dtype='int16'
+            )
+            sd.wait()
+
+            # Remove recording message
+            status_placeholder.empty()
+
+            st.success("✅ Recording complete!")
+
+            # Save audio to temporary WAV file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav", mode="wb") as tmpfile:
+                write(tmpfile.name, sample_rate, audio)
+                tmpfile.flush()
+                os.fsync(tmpfile.fileno())
+                tmpfile_path = tmpfile.name
+
+            # Play recorded audio
+            st.audio(tmpfile_path, format="audio/wav")
+
+            # Download button
+            with open(tmpfile_path, "rb") as f:
+                st.download_button(
+                    label="⬇️ Download Audio",
+                    data=f.read(),
+                    file_name="recorded_audio.wav",
+                    mime="audio/wav"
+                )
+
+            # Transcription
+            with st.spinner("🔍 Transcribing..."):
+                try:
+                    result = transcribe_audio(tmpfile_path, language)
+
+                    if result["text"].strip():
+                        st.success("✅ Transcription complete!")
+                        st.text_area(
+                            "📄 Transcribed Text",
+                            result["text"],
+                            height=200
+                        )
+                    else:
+                        st.warning("⚠️ No speech detected.")
+
+                except Exception as e:
+                    st.error(f"❌ Transcription failed: {e}")
+
+                finally:
+                    if os.path.exists(tmpfile_path):
+                        os.remove(tmpfile_path)
+
 
 # ------------------- Video / YouTube Transcription UI -------------------
 with tab3:
